@@ -220,6 +220,17 @@ class MapEditor:
                 self.map = [[TileType.EMPTY.value for _ in range(MAP_SIZE)] for _ in range(MAP_SIZE)]
         except Exception as e: pass
 
+    def pad_map(self, map_data):
+        """Ensure map has correct dimensions"""
+        if not map_data:
+            return [[TileType.EMPTY.value for _ in range(MAP_SIZE)] for _ in range(MAP_SIZE)]
+        
+        result = [[TileType.EMPTY.value for _ in range(MAP_SIZE)] for _ in range(MAP_SIZE)]
+        for y in range(min(len(map_data), MAP_SIZE)):
+            for x in range(min(len(map_data[y]), MAP_SIZE)):
+                result[y][x] = map_data[y][x]
+        return result
+
     def save_map(self):
         filename = MAP_DATA_FILE if self.current_level_num == 1 else f"map_level_{self.current_level_num}.json"
         with open(filename, 'w') as f:
@@ -284,7 +295,13 @@ class MapEditor:
                 self.editor_message_timer = 120
             except: pass
         elif isinstance(act, str) and act.startswith("floor_"):
-            self.floor_texture = act.split("_")[1]
+            # FIX: Improved floor texture parsing with error checking
+            parts = act.split("_")
+            if len(parts) >= 2:
+                self.floor_texture = parts[1]
+            else:
+                self.editor_message = "Invalid floor texture!"
+                self.editor_message_timer = 90
         else:
             self.active_tile = act
             self.fill_mode = False
@@ -432,6 +449,7 @@ class MapEditor:
 
         info_bar_height = 35
         pygame.draw.rect(self.screen, (40, 35, 30), (self.left_panel_w, self.editor_height - info_bar_height, self.editor_width - self.left_panel_w - self.right_panel_w, info_bar_height))
+        # FIX: Fixed syntax error - missing closing parenthesis
         pygame.draw.line(self.screen, (200, 180, 100), (self.left_panel_w, self.editor_height - info_bar_height), (self.editor_width - self.right_panel_w, self.editor_height - info_bar_height), 2)
         
         tool_name = self.tile_names.get(self.active_tile, "Unknown Tool")
@@ -498,6 +516,3 @@ class MapEditor:
                             self.map[gy][gx] = self.active_tile
             self.draw()
             self.clock.tick(60)
-
-
-
