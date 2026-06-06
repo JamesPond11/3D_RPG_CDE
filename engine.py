@@ -89,8 +89,22 @@ class Game:
         self.player_y = 24.0
         self.player_angle = 0.0
         
+        # Create icon and sfx dictionaries for Inventory
+        icons_dict = {
+            "sword": None, "key": None, "key_silver": None, "key_gold": None,
+            "key_dungeon": None, "health_potion": None, "mana_potion": None,
+            "artifact": None, "unlit_torch": None, "lit_torch": None, "staff": None
+        }
+        
+        sfx_dict = {
+            "door": SFX_DOOR,
+            "pickup": SFX_PICKUP,
+            "use": SFX_USE,
+            "drink": SFX_DRINK
+        }
+        
         # Inventory and UI
-        self.inventory = Inventory()
+        self.inventory = Inventory(icons_dict, sfx_dict)
         self.action_bar = ActionBar({})
         
         # Game state
@@ -336,7 +350,7 @@ class Game:
             tile = self.map[tile_y][tile_x]
             
             if tile == TileType.ITEM_DAGGER.value:
-                self.inventory.add_item("Dagger", 1)
+                self.inventory.add_item("Dagger", 1, "weapon", "A sharp blade", health=0, mana=0)
                 self.map[tile_y][tile_x] = TileType.EMPTY.value
                 if SFX_PICKUP: SFX_PICKUP.play()
             elif tile == TileType.ITEM_HEALTH_POTION.value:
