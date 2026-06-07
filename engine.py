@@ -46,6 +46,34 @@ SFX_CRICKETS = load_audio_safe("Midnight_crickets.mp3")
 SFX_TORCH = load_audio_safe("torches_burning_sound.mp3") 
 SFX_HIT_METALLIC = load_audio_safe("sword_hit_metallic.mp3")
 
+def get_tile_color(tile_type):
+    """Return color for minimap tiles based on tile type"""
+    if tile_type == TileType.EMPTY.value:
+        return (50, 50, 50)  # Dark gray
+    elif tile_type in [TileType.WALL_BRICK.value, TileType.WALL_STONE.value, TileType.WALL_WOOD.value,
+                       TileType.WALL_BRICK_CRACKED.value, TileType.WALL_STONE_CRACKED.value, 
+                       TileType.WALL_WOOD_CRACKED.value]:
+        return (150, 150, 150)  # Gray for walls
+    elif tile_type in [TileType.TREE.value, TileType.DEAD_TREE.value, TileType.BUSH.value]:
+        return (0, 150, 0)  # Green for vegetation
+    elif tile_type == TileType.ROCK.value:
+        return (100, 100, 100)  # Dark gray for rocks
+    elif tile_type in [TileType.ITEM_DAGGER.value, TileType.ITEM_KEY.value, TileType.ITEM_KEY_SILVER.value,
+                       TileType.ITEM_KEY_GOLD.value, TileType.ITEM_KEY_DUNGEON.value, TileType.ITEM_HEALTH_POTION.value,
+                       TileType.ITEM_FOOD.value, TileType.ITEM_ARTIFACT.value, TileType.ITEM_UNLIT_TORCH.value,
+                       TileType.ITEM_STAFF.value, TileType.ITEM_KEY_RUSTY_2.value, TileType.ITEM_STAMINA_POTION.value]:
+        return (255, 200, 50)  # Gold/yellow for items
+    elif tile_type in [TileType.DOOR.value, TileType.DOOR_SILVER.value, TileType.DOOR_GOLD.value]:
+        return (150, 100, 50)  # Brown for doors
+    elif tile_type == TileType.PLAYER_SPAWN.value:
+        return (50, 150, 255)  # Blue for player spawn
+    elif tile_type == TileType.ENEMY_GHOST.value:
+        return (255, 0, 0)  # Red for enemies
+    elif tile_type == TileType.STAIRS.value:
+        return (200, 100, 255)  # Purple for stairs
+    else:
+        return (50, 50, 50)  # Default dark gray
+
 class Game:
     def __init__(self):
         pygame.init()
@@ -271,27 +299,94 @@ class Game:
         
         self.screen.blit(self.raycasting_surface, (0, 0))
 
-    def render_ui(self):
-        """Render UI elements like health, mana, stats"""
-        # Health bar
-        health_text = self.font_msg.render(f"HP: {self.health}/{self.max_health}", True, (255, 0, 0))
-        self.screen.blit(health_text, (10, 10))
+    def render_minimap(self):
+        """Render minimap in top-right corner"""
+        minimap_size = 150  # Size of minimap on screen
+        minimap_tile_size = minimap_size // MAP_SIZE
+        minimap_x = WIDTH - minimap_size - 10
+        minimap_y = 10
         
-        # Mana bar
-        mana_text = self.font_msg.render(f"Mana: {self.mana}/{self.max_mana}", True, (0, 100, 255))
-        self.screen.blit(mana_text, (10, 35))
+        # Draw minimap background
+        pygame.draw.rect(self.screen, (20, 20, 20), (minimap_x, minimap_y, minimap_size, minimap_size))
+        pygame.draw.rect(self.screen, (200, 180, 100), (minimap_x, minimap_y, minimap_size, minimap_size), 2)
         
-        # Stamina bar
-        stamina_text = self.font_msg.render(f"Stamina: {self.stamina}/{self.max_stamina}", True, (0, 255, 0))
-        self.screen.blit(stamina_text, (10, 60))
+        # Draw map tiles
+        for y in range(MAP_SIZE):
+            for x in range(MAP_SIZE):
+                tile_type = self.map[y][x]
+                tile_color = get_tile_color(tile_type)
+                
+                rect = pygame.Rect(
+                    minimap_x + x * minimap_tile_size,
+                    minimap_y + y * minimap_tile_size,
+                    minimap_tile_size,
+                    minimap_tile_size
+                )
+                pygame.draw.rect(self.screen, tile_color, rect)
+        
+        # Draw player position on minimap
+        player_minimap_x = int((self.player_x / TILE_SIZE) * minimap_tile_size)
+        player_minimap_y = int((self.player_y / TILE_SIZE) * minimap_tile_size)
+        player_pos = (minimap_x + player_minimap_x, minimap_y + player_minimap_y)
+        pygame.draw.circle(self.screen, (255, 255, 255), player_pos, 3)
+
+    def render_hud(self):
+        """Render HUD with styled bars and stats"""
+        hud_x = 10
+        hud_y = 10
+        bar_width = 330
+        bar_height = 25
+        spacing = 5
+        
+        # HUD Background panel
+        hud_panel = pygame.Rect(hud_x - 5, hud_y - 5, bar_width + 10, (bar_height + spacing) * 4)
+        pygame.draw.rect(self.screen, (30, 30, 35), hud_panel)
+        pygame.draw.rect(self.screen, (200, 180, 100), hud_panel, 3)  # Gold border
+        
+        # Health Bar
+        health_text = self.font_small_bold.render(f"HP: {int(self.health)}/{int(self.max_health)}", True, (255, 50, 50))
+        self.screen.blit(health_text, (hud_x + 5, hud_y + 5))
+        
+        health_bar_rect = pygame.Rect(hud_x, hud_y + 25, bar_width, bar_height)
+        pygame.draw.rect(self.screen, (50, 0, 0), health_bar_rect)
+        health_fill = bar_width * (self.health / self.max_health)
+        pygame.draw.rect(self.screen, (255, 50, 50), (hud_x, hud_y + 25, health_fill, bar_height))
+        pygame.draw.rect(self.screen, (200, 180, 100), health_bar_rect, 2)  # Gold border
+        
+        # Mana Bar
+        mana_y = hud_y + bar_height + spacing + 30
+        mana_text = self.font_small_bold.render(f"Mana: {int(self.mana)}/{int(self.max_mana)}", True, (50, 150, 255))
+        self.screen.blit(mana_text, (hud_x + 5, mana_y - 20))
+        
+        mana_bar_rect = pygame.Rect(hud_x, mana_y, bar_width, bar_height)
+        pygame.draw.rect(self.screen, (0, 50, 100), mana_bar_rect)
+        mana_fill = bar_width * (self.mana / self.max_mana)
+        pygame.draw.rect(self.screen, (50, 100, 255), (hud_x, mana_y, mana_fill, bar_height))
+        pygame.draw.rect(self.screen, (200, 180, 100), mana_bar_rect, 2)  # Gold border
+        
+        # Stamina Bar
+        stamina_y = mana_y + bar_height + spacing
+        stamina_text = self.font_small_bold.render(f"Stamina: {int(self.stamina)}/{int(self.max_stamina)}", True, (100, 255, 100))
+        self.screen.blit(stamina_text, (hud_x + 5, stamina_y))
+        
+        stamina_bar_rect = pygame.Rect(hud_x, stamina_y + 20, bar_width, bar_height)
+        pygame.draw.rect(self.screen, (0, 50, 0), stamina_bar_rect)
+        stamina_fill = bar_width * (self.stamina / self.max_stamina)
+        pygame.draw.rect(self.screen, (100, 255, 100), (hud_x, stamina_y + 20, stamina_fill, bar_height))
+        pygame.draw.rect(self.screen, (200, 180, 100), stamina_bar_rect, 2)  # Gold border
         
         # Level info
-        level_text = self.font.render(f"Level: {self.current_level}", True, (200, 200, 200))
-        self.screen.blit(level_text, (WIDTH - 150, 10))
+        level_y = stamina_y + 45
+        level_text = self.font_small_bold.render(f"LVL: {self.current_level}", True, (255, 255, 100))
+        self.screen.blit(level_text, (hud_x + 5, level_y))
+
+    def render_ui(self):
+        """Render UI elements"""
+        # Render minimap
+        self.render_minimap()
         
-        # Controls hint
-        controls_text = self.font.render("W/A/S/D: Move | Arrow Keys: Rotate | C: Stats | ESC: Quit", True, (150, 150, 150))
-        self.screen.blit(controls_text, (WIDTH // 2 - controls_text.get_width() // 2, HEIGHT - 25))
+        # Render HUD
+        self.render_hud()
         
         # Action bar
         self.action_bar.draw(self.screen)
