@@ -142,6 +142,11 @@ class Game:
         
         # Raycasting surface
         self.raycasting_surface = pygame.Surface((WIDTH, HEIGHT))
+        
+        # Shadow system
+        self.time_of_day = 0.0  # 0-1, where 0.5 is noon (sun at top)
+        self.sun_angle = 0.0  # Direction of sun (radians)
+        self.shadow_length = 2.0  # How far shadows extend
 
     def get_initial_map_data(self):
         """Load map from JSON or create default bordered map"""
@@ -241,6 +246,29 @@ class Game:
         if keys[pygame.K_RIGHT]:
             self.player_angle += PLAYER_ROTATION_SPEED
 
+    def update_sun_position(self):
+        """Update sun position based on time of day"""
+        self.time_of_day += 0.0005  # Slow progression through day
+        if self.time_of_day >= 1.0:
+            self.time_of_day = 0.0
+        
+        # Sun moves in a circle: 0.0 = east, 0.25 = north, 0.5 = west, 0.75 = south
+        self.sun_angle = self.time_of_day * 2 * math.pi
+
+    def get_shadow_offset(self, depth, angle_to_player):
+        """Calculate shadow offset based on wall distance and sun angle"""
+        # Shadow direction is opposite to sun
+        shadow_direction = self.sun_angle + math.pi
+        
+        # Shadow length decreases with distance (closer walls = longer shadows)
+        shadow_dist = max(0, (1.0 - (depth / MAX_DEPTH)) * self.shadow_length)
+        
+        # Calculate shadow offset
+        shadow_x = math.cos(shadow_direction) * shadow_dist
+        shadow_y = math.sin(shadow_direction) * shadow_dist
+        
+        return shadow_x, shadow_y
+
     def cast_ray(self, angle):
         """Cast a single ray and return the distance to the nearest wall"""
         sin_a = math.sin(angle)
@@ -265,12 +293,21 @@ class Game:
         
         return MAX_DEPTH
 
+    def get_sun_brightness(self):
+        """Get brightness multiplier based on sun position (0.3 - 1.0)"""
+        # Sun is brightest at noon (time_of_day = 0.5)
+        sun_height = math.sin(self.time_of_day * math.pi)  # 0 at dawn/dusk, 1 at noon
+        return 0.3 + sun_height * 0.7  # Range: 0.3 to 1.0
+
     def render_3d_view(self):
-        """Render the 3D first-person view using raycasting"""
+        """Render the 3D first-person view using raycasting with shadows"""
         self.raycasting_surface.fill((50, 50, 60))  # Sky/ceiling color
         
         # Draw floor
         pygame.draw.rect(self.raycasting_surface, (40, 50, 40), (0, HEIGHT // 2, WIDTH, HEIGHT // 2))
+        
+        # Get sun brightness for this frame
+        sun_brightness = self.get_sun_brightness()
         
         # Cast rays for each column
         for i in range(NUM_RAYS):
@@ -290,9 +327,23 @@ class Game:
             col_width = WIDTH // NUM_RAYS
             x = i * col_width
             
-            # Shade based on distance
-            shade = max(50, 255 - (depth / MAX_DEPTH) * 200)
-            color = (shade, shade * 0.7, shade * 0.5)
+            # Calculate shadow darkness based on sun angle relative to wall
+            # Walls parallel to sun cast no shadow, walls perpendicular cast darkest shadow
+            wall_normal = (angle + math.pi / 2)  # Normal to the wall
+            sun_alignment = math.cos(wall_normal - self.sun_angle)  # -1 to 1
+            
+            # Shadow intensity: 0 = no shadow (sun directly on wall), 1 = full shadow (sun behind wall)
+            shadow_intensity = max(0, -sun_alignment)  # Only shadows when sun is "behind" wall
+            
+            # Base shade from distance
+            distance_shade = max(50, 255 - (depth / MAX_DEPTH) * 200)
+            
+            # Apply shadow: reduce brightness based on sun position
+            shadow_factor = 1.0 - (shadow_intensity * 0.5)  # Max 50% darkening from shadow
+            final_shade = distance_shade * shadow_factor * sun_brightness
+            final_shade = max(20, min(255, final_shade))  # Clamp to valid range
+            
+            color = (final_shade, final_shade * 0.7, final_shade * 0.5)
             
             rect = pygame.Rect(x, (HEIGHT - wall_height) // 2, col_width, wall_height)
             pygame.draw.rect(self.raycasting_surface, color, rect)
@@ -329,6 +380,11 @@ class Game:
         player_minimap_y = int((self.player_y / TILE_SIZE) * minimap_tile_size)
         player_pos = (minimap_x + player_minimap_x, minimap_y + player_minimap_y)
         pygame.draw.circle(self.screen, (255, 255, 255), player_pos, 3)
+        
+        # Draw sun direction indicator on minimap
+        sun_x = minimap_x + int(math.cos(self.sun_angle) * 40)
+        sun_y = minimap_y + int(math.sin(self.sun_angle) * 40)
+        pygame.draw.circle(self.screen, (255, 255, 0), (sun_x, sun_y), 4)
 
     def render_hud(self):
         """Render HUD with styled bars and stats"""
@@ -379,6 +435,11 @@ class Game:
         level_y = stamina_y + 45
         level_text = self.font_small_bold.render(f"LVL: {self.current_level}", True, (255, 255, 100))
         self.screen.blit(level_text, (hud_x + 5, level_y))
+        
+        # Time of day display
+        hour = int(self.time_of_day * 24)
+        time_text = self.font.render(f"Time: {hour:02d}:00", True, (200, 200, 200))
+        self.screen.blit(time_text, (hud_x + 5, level_y + 25))
 
     def render_ui(self):
         """Render UI elements"""
@@ -536,6 +597,9 @@ class Game:
             keys = pygame.key.get_pressed()
             self.handle_player_movement(keys)
             self.check_item_pickup()
+            
+            # Update sun position
+            self.update_sun_position()
             
             # Render
             self.render_3d_view()
